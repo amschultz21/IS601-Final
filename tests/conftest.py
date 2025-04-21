@@ -36,6 +36,7 @@ from app.utils.security import hash_password
 from app.utils.template_manager import TemplateManager
 from app.services.email_service import EmailService
 from app.services.jwt_service import create_access_token
+from app.services import email_service
 
 fake = Faker()
 
@@ -45,14 +46,20 @@ engine = create_async_engine(TEST_DATABASE_URL, echo=settings.debug)
 AsyncTestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 AsyncSessionScoped = scoped_session(AsyncTestingSessionLocal)
 
+from unittest.mock import AsyncMock, patch
+import pytest
 
-@pytest.fixture
-def email_service():
-    # Assuming the TemplateManager does not need any arguments for initialization
-    template_manager = TemplateManager()
-    email_service = EmailService(template_manager=template_manager)
-    return email_service
+# PATCH EARLY BEFORE ANY IMPORTS THAT TRIGGER EMAIL
+patcher_1 = patch("app.services.email_service.EmailService.send_verification_email", new_callable=AsyncMock)
+patcher_2 = patch("app.services.email_service.EmailService.send_user_email", new_callable=AsyncMock)
+patcher_1.start()
+patcher_2.start()
 
+@pytest.fixture(scope="session", autouse=True)
+def stop_email_patches():
+    yield
+    patcher_1.stop()
+    patcher_2.stop()
 
 # this is what creates the http client for your api tests
 @pytest.fixture(scope="function")
@@ -227,14 +234,8 @@ def user_token(user):
     token_data = {"sub": str(user.id), "role": user.role.name}
     return create_access_token(data=token_data, expires_delta=timedelta(minutes=30))
 
-@pytest.fixture
-def email_service():
-    if settings.send_real_mail == 'true':
-        # Return the real email service when specifically testing email functionality
-        return EmailService()
-    else:
-        # Otherwise, use a mock to prevent actual email sending
-        mock_service = AsyncMock(spec=EmailService)
-        mock_service.send_verification_email.return_value = None
-        mock_service.send_user_email.return_value = None
-        return mock_service
+@pytest.fixture(autouse=True)
+def mock_all_email_sending():
+    with patch.object(email_service.EmailService, "send_verification_email", new_callable=AsyncMock), \
+         patch.object(email_service.EmailService, "send_user_email", new_callable=AsyncMock):
+        yield
