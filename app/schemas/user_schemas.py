@@ -34,8 +34,9 @@ class UserBase(BaseModel):
         from_attributes = True
 
 class UserCreate(UserBase):
-    email: EmailStr = Field(..., example="john.doe@example.com")
-    password: str = Field(..., example="Secure*1234")
+    email: EmailStr = Field(..., description="Valid email address", example="john.doe@example.com")
+    password: str = Field(..., min_length=8, description="Password with at least 8 characters", example="Secure*1234")
+    role: UserRole = Field(..., description="User role (e.g., AUTHENTICATED, ADMIN, MANAGER)", example="AUTHENTICATED")
 
 class UserUpdate(UserBase):
     email: Optional[EmailStr] = Field(None, example="john.doe@example.com")
