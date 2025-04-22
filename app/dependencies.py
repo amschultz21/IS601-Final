@@ -30,18 +30,26 @@ async def get_db() -> AsyncSession:
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    payload = decode_token(token)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing Authorization Header")
+
+    try:
+        payload = decode_token(token)
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Malformed or invalid token")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token validation failed: {str(e)}")
+
     if payload is None:
-        raise credentials_exception
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
     user_id: str = payload.get("sub")
     user_role: str = payload.get("role")
     if user_id is None or user_role is None:
-        raise credentials_exception
+        raise HTTPException(status_code=401, detail="Invalid token claims")
+
     return {"user_id": user_id, "role": user_role}
 
 def require_role(role: str):
