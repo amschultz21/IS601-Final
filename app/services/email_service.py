@@ -16,6 +16,9 @@ class EmailService:
         self.template_manager = template_manager
 
     async def send_user_email(self, user_data: dict, email_type: str):
+        if not settings.email_enabled:
+            print(f"[Mock Email] Skipped sending '{email_type}' email to {user_data['email']}")
+            
         subject_map = {
             'email_verification': "Verify Your Account",
             'password_reset': "Password Reset Instructions",

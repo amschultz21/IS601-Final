@@ -9,6 +9,7 @@ from app.database import Database
 from app.dependencies import get_settings
 from app.routers import user_routes
 from app.utils.api_description import getDescription
+from app.exceptions import DuplicateEmailException  # New import
 
 app = FastAPI(
     title="User Management",
@@ -22,7 +23,6 @@ app = FastAPI(
     license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,15 +41,12 @@ async def startup_event():
 async def exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"message": "An unexpected error occurred."})
 
-# 🔽 Validation error handler (NEW)
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+# Custom handler for duplicate emails
+@app.exception_handler(DuplicateEmailException)
+async def duplicate_email_handler(request: Request, exc: DuplicateEmailException):
     return JSONResponse(
-        status_code=422,
-        content={
-            "message": "Invalid input. Please check the required fields.",
-            "details": jsonable_encoder(exc.errors()),
-        },
+        status_code=400,
+        content={"error": True, "message": f"Email '{exc.email}' already exists."}
     )
 
 app.include_router(user_routes.router)
