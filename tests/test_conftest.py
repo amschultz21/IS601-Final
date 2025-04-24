@@ -7,6 +7,8 @@ from sqlalchemy.future import select
 
 from app.models.user_model import User, UserRole
 from app.utils.security import verify_password
+from app.utils.template_manager import TemplateManager
+from app.services.email_service import EmailService
 
 @pytest.mark.asyncio
 async def test_user_creation(db_session, verified_user):
@@ -62,3 +64,8 @@ async def test_update_professional_status(db_session, verified_user):
     updated_user = result.scalars().first()
     assert updated_user.is_professional
     assert updated_user.professional_status_updated_at is not None
+
+@pytest.fixture
+def email_service():
+    template_manager = TemplateManager()
+    return EmailService(template_manager=template_manager)

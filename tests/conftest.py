@@ -36,13 +36,13 @@ from app.utils.security import hash_password
 from app.utils.template_manager import TemplateManager
 from app.services.email_service import EmailService
 from app.services.jwt_service import create_access_token
-from app.services import email_service
+from settings.config import settings
 
 fake = Faker()
 
 settings = get_settings()
 TEST_DATABASE_URL = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
-engine = create_async_engine(TEST_DATABASE_URL, echo=settings.debug)
+engine = create_async_engine(TEST_DATABASE_URL, echo=bool(settings.debug))
 AsyncTestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 AsyncSessionScoped = scoped_session(AsyncTestingSessionLocal)
 
@@ -236,6 +236,11 @@ def user_token(user):
 
 @pytest.fixture(autouse=True)
 def mock_all_email_sending():
-    with patch.object(email_service.EmailService, "send_verification_email", new_callable=AsyncMock), \
-         patch.object(email_service.EmailService, "send_user_email", new_callable=AsyncMock):
+    with patch.object(EmailService, "send_verification_email", new_callable=AsyncMock), \
+         patch.object(EmailService, "send_user_email", new_callable=AsyncMock):
         yield
+
+@pytest.fixture
+def test_email_service():
+    template_manager = TemplateManager()
+    return EmailService(template_manager=template_manager)
