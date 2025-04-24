@@ -171,25 +171,33 @@ async def list_users(
     request: Request,
     skip: int = 0,
     limit: int = 10,
+    nickname: str | None = None,
+    email: str | None = None,
+    role: str | None = None,
+    is_locked: bool | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))
 ):
-    total_users = await UserService.count(db)
-    users = await UserService.list_users(db, skip, limit)
+    filters = {
+        "nickname": nickname,
+        "email": email,
+        "role": role,
+        "is_locked": is_locked,
+    }
+    filters = {k: v for k, v in filters.items() if v is not None}
 
-    user_responses = [
-        UserResponse.model_validate(user) for user in users
-    ]
-    
+    total_users = await UserService.count(db, filters)
+    users = await UserService.list_users(db, skip=skip, limit=limit, filters=filters)
+
+    user_responses = [UserResponse.model_validate(user) for user in users]
     pagination_links = generate_pagination_links(request, skip, limit, total_users)
-    
-    # Construct the final response with pagination details
+
     return UserListResponse(
         items=user_responses,
         total=total_users,
         page=skip // limit + 1,
         size=len(user_responses),
-        links=pagination_links  # Ensure you have appropriate logic to create these links
+        links=pagination_links
     )
 
 @router.post("/register/", response_model=UserResponse, tags=["Login and Registration"])

@@ -113,8 +113,16 @@ class UserService:
         return True
 
     @classmethod
-    async def list_users(cls, session: AsyncSession, skip: int = 0, limit: int = 10) -> List[User]:
-        query = select(User).offset(skip).limit(limit)
+    async def list_users(cls, session: AsyncSession, skip: int = 0, limit: int = 10, filters: dict = None) -> List[User]:
+        query = select(User)
+
+        if filters:
+            for key, value in filters.items():
+                column = getattr(User, key, None)
+                if column is not None:
+                    query = query.where(column == value)
+
+        query = query.offset(skip).limit(limit)
         result = await cls._execute_query(session, query)
         return result.scalars().all() if result else []
 
@@ -177,17 +185,18 @@ class UserService:
         return False
 
     @classmethod
-    async def count(cls, session: AsyncSession) -> int:
-        """
-        Count the number of users in the database.
-
-        :param session: The AsyncSession instance for database access.
-        :return: The count of users.
-        """
+    async def count(cls, session: AsyncSession, filters: dict = None) -> int:
         query = select(func.count()).select_from(User)
+
+        if filters:
+            for key, value in filters.items():
+                column = getattr(User, key, None)
+                if column is not None:
+                    query = query.where(column == value)
+
         result = await session.execute(query)
-        count = result.scalar()
-        return count
+        return result.scalar()
+
     
     @classmethod
     async def unlock_user_account(cls, session: AsyncSession, user_id: UUID) -> bool:

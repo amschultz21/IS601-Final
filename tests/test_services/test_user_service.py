@@ -161,3 +161,43 @@ async def test_unlock_user_account(db_session, locked_user):
     assert unlocked, "The account should be unlocked"
     refreshed_user = await UserService.get_by_id(db_session, locked_user.id)
     assert not refreshed_user.is_locked, "The user should no longer be locked"
+
+async def test_search_users_by_nickname(db_session, users_with_same_role_50_users):
+    filtered = await UserService.list_users(db_session, filters={"nickname": users_with_same_role_50_users[0].nickname})
+    assert filtered[0].nickname == users_with_same_role_50_users[0].nickname
+
+import pytest
+from app.models.user_model import UserRole
+
+@pytest.mark.asyncio
+async def test_filter_users_by_nickname(db_session, users_with_same_role_50_users):
+    target = users_with_same_role_50_users[0]
+    results = await UserService.list_users(db_session, filters={"nickname": target.nickname})
+    assert len(results) >= 1
+    assert all(user.nickname == target.nickname for user in results)
+
+@pytest.mark.asyncio
+async def test_filter_users_by_email(db_session, users_with_same_role_50_users):
+    target = users_with_same_role_50_users[0]
+    results = await UserService.list_users(db_session, filters={"email": target.email})
+    assert len(results) == 1
+    assert results[0].email == target.email
+
+@pytest.mark.asyncio
+async def test_filter_users_by_role(db_session, users_with_same_role_50_users):
+    target_role = users_with_same_role_50_users[0].role.name
+    results = await UserService.list_users(db_session, filters={"role": target_role})
+    assert len(results) > 0
+    assert all(user.role.name == target_role for user in results)
+
+@pytest.mark.asyncio
+async def test_filter_users_by_is_locked(db_session, users_with_same_role_50_users):
+    # Lock one user manually for the test
+    user = users_with_same_role_50_users[0]
+    user.is_locked = True
+    db_session.add(user)
+    await db_session.commit()
+
+    results = await UserService.list_users(db_session, filters={"is_locked": True})
+    assert any(u.id == user.id for u in results)
+    assert all(u.is_locked for u in results)
