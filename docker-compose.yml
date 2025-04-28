@@ -35,6 +35,9 @@ services:
       - ./:/myapp/
     ports:
       - "8000:8000"
+    environment:
+      - kafka_bootstrap_servers: "kafka:9092"
+      - kafka_email_topic: "email-topic"
     depends_on:
       postgres:
         condition: service_healthy
