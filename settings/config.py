@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     send_real_mail: bool = Field(default=False)
 
     # Kafka Settings
-    kafka_bootstrap_servers: str
-    kafka_email_topic: str
+    kafka_bootstrap_servers: str = Field(default="localhost:9092")
+    kafka_email_topic: str = Field(default="email-topic")
 
     # Minio settings
     minio_endpoint: str = Field(default="http://localhost:9000")
