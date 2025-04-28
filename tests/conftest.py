@@ -16,8 +16,12 @@ Fixtures:
 # Standard library imports
 from builtins import Exception, range, str
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Third-party imports
 import pytest
@@ -37,6 +41,7 @@ from app.utils.template_manager import TemplateManager
 from app.services.email_service import EmailService
 from app.services.jwt_service import create_access_token
 from settings.config import settings
+from unittest.mock import patch, MagicMock
 
 fake = Faker()
 
@@ -244,3 +249,16 @@ def mock_all_email_sending():
 def test_email_service():
     template_manager = TemplateManager()
     return EmailService(template_manager=template_manager)
+
+@pytest.fixture
+def mock_minio(monkeypatch):
+    mock_client = MagicMock()
+    monkeypatch.setattr("app.utils.minio_client.minio_client", mock_client)
+    return mock_client
+
+@pytest.fixture(autouse=True)
+def mock_kafka_producer():
+    with patch("app.utils.kafka_producer.KafkaProducer") as MockKafkaProducer:
+        mock_instance = MagicMock()
+        MockKafkaProducer.return_value = mock_instance
+        yield mock_instance

@@ -22,6 +22,7 @@ from builtins import dict, int, len, str
 from datetime import timedelta
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from fastapi import File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
@@ -34,6 +35,10 @@ from app.utils.link_generation import create_user_links, generate_pagination_lin
 from app.dependencies import get_settings
 from app.services.email_service import EmailService
 from app.exceptions import DuplicateEmailException
+from app.utils.minio_client import minio_client, ensure_bucket_exists
+from app.tasks.email_tasks import send_email_task
+import uuid
+import io
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 settings = get_settings()
@@ -206,8 +211,14 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_db
     if existing_user:
         raise DuplicateEmailException(user_data.email)
 
-    user = await UserService.register_user(session, user_data.model_dump(), email_service)
-    return user
+    user = await UserService.register_user(session, user_data.model_dump())
+
+    # Send email via Celery
+    send_email_task.delay({
+        "to": user.email,
+        "subject": "Verify your email",
+        "body": f"Hi {user.first_name}, welcome to our platform! Please verify your email."
+})
 
 @router.post("/login/", response_model=TokenResponse, tags=["Login and Registration"])
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_db)):
@@ -245,7 +256,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Async
 
 
 @router.get("/verify-email/{user_id}/{token}", status_code=status.HTTP_200_OK, name="verify_email", tags=["Login and Registration"])
-async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get_db), email_service: EmailService = Depends(get_email_service)):
+async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get_db)):
     """
     Verify user's email with a provided token.
     
@@ -255,3 +266,35 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
     if await UserService.verify_email_with_token(db, user_id, token):
         return {"message": "Email verified successfully"}
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+
+@router.post("/users/{user_id}/upload-profile-picture", response_model=UserResponse, tags=["User Management Requires (Admin or Manager Roles)"])
+async def upload_profile_picture(
+    user_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))
+):
+    user = await UserService.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Generate a unique filename
+    extension = file.filename.split(".")[-1]
+    unique_filename = f"profile_pictures/{uuid.uuid4()}.{extension}"
+
+    # Upload to Minio
+    content = await file.read()
+    minio_client.put_object(
+        bucket_name=settings.minio_bucket_name,
+        object_name=unique_filename,
+        data=io.BytesIO(content),
+        length=len(content),
+        content_type=file.content_type
+    )
+
+    # Update user profile with picture URL
+    file_url = f"{settings.minio_endpoint}/{settings.minio_bucket_name}/{unique_filename}"
+    await UserService.update(db, user_id, {"profile_picture_url": file_url})
+    updated_user = await UserService.get_by_id(db, user_id)
+
+    return UserResponse.model_validate(updated_user)

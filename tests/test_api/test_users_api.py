@@ -1,11 +1,15 @@
 from builtins import str
 import pytest
+import io
+import uuid
 from httpx import AsyncClient
 from app.main import app
 from app.models.user_model import User, UserRole
 from app.utils.nickname_gen import generate_nickname
 from app.utils.security import hash_password
 from app.services.jwt_service import decode_token  # Import your FastAPI app
+from unittest.mock import patch
+from app.services.user_service import UserService
 
 # Example of a test function using the async_client fixture
 @pytest.mark.asyncio
@@ -65,7 +69,7 @@ async def test_delete_user(async_client, admin_user, admin_token):
 async def test_create_user_duplicate_email(async_client, verified_user):
     user_data = {
         "email": verified_user.email,
-        "password": "AnotherPassword123!",
+        "password": "MySuperPassword$1234",
         "role": UserRole.ADMIN.name
     }
     response = await async_client.post("/register/", json=user_data)
@@ -190,3 +194,62 @@ async def test_list_users_unauthorized(async_client, user_token):
         headers={"Authorization": f"Bearer {user_token}"}
     )
     assert response.status_code == 403  # Forbidden, as expected for regular user
+
+@patch("app.routers.user_routes.minio_client.put_object")
+@pytest.mark.asyncio
+async def test_upload_profile_picture(mock_put_object, async_client: AsyncClient, db_session, verified_user):
+    mock_put_object.return_value = None  # mock the upload
+
+    # Ensure the user is an admin
+    verified_user.role = UserRole.ADMIN
+    db_session.add(verified_user)
+    await db_session.commit()
+
+    # Log in to get the token
+    login_response = await async_client.post("/login/", data={
+        "username": verified_user.email,
+        "password": "MySuperPassword$1234"
+    })
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+
+    # Create dummy image file
+    image_content = b"fake-image-data"
+    test_filename = "test_image.png"
+    files = {"file": (test_filename, io.BytesIO(image_content), "image/png")}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Send request to upload
+    url = f"/users/{verified_user.id}/upload-profile-picture"
+    response = await async_client.post(url, headers=headers, files=files)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "profile_picture_url" in data
+
+@pytest.mark.asyncio
+async def test_profile_picture_upload_success(async_client, admin_user, admin_token):
+    file_content = b"fake-img"
+    filename = "test.png"
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    with patch("app.routers.user_routes.minio_client.put_object") as mock_minio:
+        response = await async_client.post(
+            f"/users/{admin_user.id}/upload-profile-picture",
+            headers=headers,
+            files={"file": (filename, io.BytesIO(file_content), "image/png")}
+        )
+        assert response.status_code == 200
+        mock_minio.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_profile_picture_upload_user_not_found(async_client, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    fake_id = "00000000-0000-0000-0000-000000000000"
+
+    response = await async_client.post(
+        f"/users/{fake_id}/upload-profile-picture",
+        headers=headers,
+        files={"file": ("file.png", io.BytesIO(b"data"), "image/png")}
+    )
+    assert response.status_code == 404

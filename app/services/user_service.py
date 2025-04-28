@@ -71,6 +71,8 @@ class UserService:
 
             else:
                 new_user.verification_token = generate_verification_token()
+                # async email sending will be triggered by the route via Celery
+
                 await email_service.send_verification_email(new_user)
 
             session.add(new_user)
@@ -125,11 +127,10 @@ class UserService:
         query = query.offset(skip).limit(limit)
         result = await cls._execute_query(session, query)
         return result.scalars().all() if result else []
-
-    @classmethod
-    async def register_user(cls, session: AsyncSession, user_data: Dict[str, str], get_email_service) -> Optional[User]:
-        return await cls.create(session, user_data, get_email_service)
     
+    @classmethod
+    async def register_user(cls, session: AsyncSession, user_data: Dict[str, str], email_service: EmailService) -> Optional[User]:
+        return await cls.create(session, user_data, email_service)
 
     @classmethod
     async def login_user(cls, session: AsyncSession, email: str, password: str) -> Optional[User]:

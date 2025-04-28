@@ -1,7 +1,6 @@
 from pydantic import Field, AnyUrl
 from pydantic_settings import BaseSettings
 
-
 class Settings(BaseSettings):
     max_login_attempts: int = Field(default=3)
     server_base_url: AnyUrl = Field(default='http://localhost')
@@ -26,6 +25,20 @@ class Settings(BaseSettings):
     smtp_password: str = Field(default='your-mailtrap-password')
     email_enabled: bool = Field(default=True)
     send_real_mail: bool = Field(default=False)
+
+    # Kafka Settings
+    kafka_bootstrap_servers: str
+    kafka_email_topic: str
+
+    # Minio settings
+    minio_endpoint: str = Field(default="http://localhost:9000")
+    minio_access_key: str = Field(default="minioadmin")
+    minio_secret_key: str = Field(default="minioadmin")
+    minio_bucket_name: str = Field(default="profile-pictures")
+    minio_public_url: str = Field(default="http://localhost:9000")
+    # Add to Settings class
+    minio_root_user: str = Field(default="minioadmin")
+    minio_root_password: str = Field(default="minioadmin")
 
     model_config = {
         "env_file": ".env",

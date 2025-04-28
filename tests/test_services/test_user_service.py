@@ -201,3 +201,41 @@ async def test_filter_users_by_is_locked(db_session, users_with_same_role_50_use
     results = await UserService.list_users(db_session, filters={"is_locked": True})
     assert any(u.id == user.id for u in results)
     assert all(u.is_locked for u in results)
+
+@pytest.mark.asyncio
+async def test_create_user_with_duplicate_email(db_session, test_email_service):
+    user_data = {
+        "nickname": generate_nickname(),
+        "email": "duplicate@example.com",
+        "password": "Password123!",
+        "role": UserRole.ADMIN.name
+    }
+    user1 = await UserService.create(db_session, user_data, test_email_service)
+    assert user1 is not None
+
+    user2 = await UserService.create(db_session, user_data, test_email_service)
+    assert user2 is None  # Should fail because duplicate email
+
+@pytest.mark.asyncio
+async def test_login_locked_user(db_session):
+    from app.utils.security import hash_password
+    from app.models.user_model import User
+    from uuid import uuid4
+    from datetime import datetime, timezone
+
+    user = User(
+        id=uuid4(),
+        nickname=generate_nickname(),
+        email="lockeduser@example.com",
+        hashed_password=hash_password("Secure123!"),
+        email_verified=True,
+        role=UserRole.AUTHENTICATED,
+        is_locked=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    result = await UserService.login_user(db_session, user.email, "Secure123!")
+    assert result is None  # Login should fail because user is locked
