@@ -36,9 +36,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL: postgresql://user:password@postgres:5432/myappdb
-      - kafka_bootstrap_servers: "kafka:9092"
-      - kafka_email_topic: "email-topic"
+      DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/myappdb
+      kafka_bootstrap_servers: kafka:9092
+      kafka_email_topic: email-topic
     depends_on:
       postgres:
         condition: service_healthy
